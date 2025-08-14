@@ -1,6 +1,8 @@
 package com.example.testinterview.scheduler;
 
+import com.example.testinterview.dto.ExchangeRateDto;
 import com.example.testinterview.entity.ExchangeRate;
+import com.example.testinterview.mapper.ExchangeRateMapper;
 import com.example.testinterview.repository.ExchangeRateRepository;
 import com.example.testinterview.service.ExchangeRateApiClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,12 +16,13 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class ExchangeRateSchedulerTest {
+public class ExchangeRateSchedulerTest {
 
     @Mock
     private ExchangeRateApiClient exchangeRateApiClient;
@@ -27,63 +30,70 @@ class ExchangeRateSchedulerTest {
     @Mock
     private ExchangeRateRepository exchangeRateRepository;
 
+    @Mock
+    private ExchangeRateMapper exchangeRateMapper;
+
     @InjectMocks
     private ExchangeRateScheduler exchangeRateScheduler;
 
-    private ExchangeRate testRate1;
-    private ExchangeRate testRate2;
+    private ExchangeRateDto sampleDto;
+    private ExchangeRate sampleEntity;
 
     @BeforeEach
     void setUp() {
-        testRate1 = ExchangeRate.builder()
-                .id("1")
-                .date("20250725")
-                .usdToNtd(new BigDecimal("29.46"))
-                .createdAt(LocalDateTime.now())
-                .build();
-
-        testRate2 = ExchangeRate.builder()
-                .id("2")
-                .date("20250726")
-                .usdToNtd(new BigDecimal("29.50"))
-                .createdAt(LocalDateTime.now())
-                .build();
+        // DTO 原始資料（String）
+        sampleDto = new ExchangeRateDto();
+        sampleDto.setDate("20250814");
+        sampleDto.setUsdToNtd("31.25");
+        // Entity 對應資料
+        sampleEntity = new ExchangeRate();
+        sampleEntity.setDate(LocalDateTime.of(2025, 8, 14, 0, 0));
+        sampleEntity.setUsdToNtd(new BigDecimal("31.25"));
     }
 
     @Test
-    void testFetchDailyRate_Success() {
+    void fetchDailyRate_ShouldSaveExchangeRate_WhenApiReturnsData() {
+        when(exchangeRateApiClient.fetchUsdToNtdRates()).thenReturn(Flux.just(sampleDto));
+        when(exchangeRateMapper.toEntity(any(ExchangeRateDto.class))).thenReturn(sampleEntity);
+        when(exchangeRateRepository.save(any(ExchangeRate.class))).thenAnswer(invocation -> {
+            ExchangeRate entity = invocation.getArgument(0);
+            return Mono.just(entity);
+        });
 
-        when(exchangeRateApiClient.fetchUsdToNtdRates()).thenReturn(Flux.just(testRate1, testRate2));
-        when(exchangeRateRepository.save(any(ExchangeRate.class)))
-                .thenReturn(Mono.just(testRate1))
-                .thenReturn(Mono.just(testRate2));
         exchangeRateScheduler.fetchDailyRate();
-        verify(exchangeRateApiClient, times(1)).fetchUsdToNtdRates();
-        verify(exchangeRateRepository, times(2)).save(any(ExchangeRate.class));
-    }
 
-    @Test
-    void testFetchDailyRate_NoData() {
-        when(exchangeRateApiClient.fetchUsdToNtdRates()).thenReturn(Flux.empty());
-        exchangeRateScheduler.fetchDailyRate();
         verify(exchangeRateApiClient, times(1)).fetchUsdToNtdRates();
-        verify(exchangeRateRepository, never()).save(any(ExchangeRate.class));
-    }
-
-    @Test
-    void testFetchDailyRate_ErrorHandling() {
-        when(exchangeRateApiClient.fetchUsdToNtdRates()).thenReturn(Flux.error(new RuntimeException("API Error")));
-        exchangeRateScheduler.fetchDailyRate();
-        verify(exchangeRateApiClient, times(1)).fetchUsdToNtdRates();
-        verify(exchangeRateRepository, never()).save(any(ExchangeRate.class));
-    }
-
-    @Test
-    void testFetchDailyRate_SaveError() {
-        when(exchangeRateApiClient.fetchUsdToNtdRates()).thenReturn(Flux.just(testRate1));
-        when(exchangeRateRepository.save(any(ExchangeRate.class))).thenReturn(Mono.error(new RuntimeException("DB Error")));
-        exchangeRateScheduler.fetchDailyRate();
-        verify(exchangeRateApiClient, times(1)).fetchUsdToNtdRates();
+        verify(exchangeRateMapper, times(1)).toEntity(any(ExchangeRateDto.class));
         verify(exchangeRateRepository, times(1)).save(any(ExchangeRate.class));
+    }
+
+    @Test
+    void fetchDailyRate_ShouldHandleError_WhenApiClientFails() {
+        RuntimeException expectedException = new RuntimeException("API调用失败");
+        when(exchangeRateApiClient.fetchUsdToNtdRates()).thenReturn(Flux.error(expectedException));
+
+        exchangeRateScheduler.fetchDailyRate();
+
+        verify(exchangeRateApiClient, times(1)).fetchUsdToNtdRates();
+        verify(exchangeRateMapper, never()).toEntity(any(ExchangeRateDto.class));
+        verify(exchangeRateRepository, never()).save(any(ExchangeRate.class));
+    }
+
+    @Test
+    void fetchDailyRate_ShouldSetCurrentUTCTime_WhenMappingEntity() {
+        when(exchangeRateApiClient.fetchUsdToNtdRates()).thenReturn(Flux.just(sampleDto));
+        when(exchangeRateMapper.toEntity(any(ExchangeRateDto.class))).thenReturn(sampleEntity);
+        when(exchangeRateRepository.save(any(ExchangeRate.class))).thenAnswer(invocation -> {
+            ExchangeRate entity = invocation.getArgument(0);
+            assert entity.getCreatedAt() != null;
+            return Mono.just(entity);
+        });
+
+        exchangeRateScheduler.fetchDailyRate();
+
+        verify(exchangeRateRepository).save(argThat(rate ->
+                rate.getCreatedAt() != null &&
+                        rate.getCreatedAt().atOffset(ZoneOffset.UTC) != null
+        ));
     }
 }
