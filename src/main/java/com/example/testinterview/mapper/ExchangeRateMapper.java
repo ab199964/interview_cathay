@@ -15,6 +15,9 @@ public interface ExchangeRateMapper {
     @Mapping(target = "date", expression = "java(toLocalDateTime(dto.getDate()))")
     ExchangeRate toEntity(ExchangeRateDto dto);
 
+
+    ExchangeRateDto toDto(ExchangeRate entity);
+
     default LocalDateTime toLocalDateTime(String date) {
         if (date == null || date.isBlank()) return null;
         LocalDate ld = LocalDate.parse(date, DateTimeFormatter.ofPattern("yyyyMMdd"));
