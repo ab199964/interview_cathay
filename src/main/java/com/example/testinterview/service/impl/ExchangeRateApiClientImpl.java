@@ -1,7 +1,6 @@
 package com.example.testinterview.service.impl;
 
 import com.example.testinterview.dto.ExchangeRateDto;
-import com.example.testinterview.entity.ExchangeRate;
 import com.example.testinterview.service.ExchangeRateApiClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -13,9 +12,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Component
 @RequiredArgsConstructor
@@ -31,7 +27,6 @@ public class ExchangeRateApiClientImpl implements ExchangeRateApiClient {
 
     @PostConstruct
     public void init() {
-        // 使用 Jackson2JsonDecoder 來處理 JSON 解碼 打API拿到非正常的JSON格式
         Jackson2JsonDecoder decoder = new Jackson2JsonDecoder(
                 new ObjectMapper(),
                 MediaType.APPLICATION_JSON,
@@ -41,24 +36,19 @@ public class ExchangeRateApiClientImpl implements ExchangeRateApiClient {
         ExchangeStrategies strategies = ExchangeStrategies.builder()
                 .codecs(configurer -> configurer.defaultCodecs().jackson2JsonDecoder(decoder))
                 .build();
+
         this.webClient = WebClient.builder()
+                .baseUrl(baseUrl)
                 .exchangeStrategies(strategies)
                 .build();
     }
 
-
     @Override
-    public Flux<ExchangeRate> fetchUsdToNtdRates() {
+    public Flux<ExchangeRateDto> fetchUsdToNtdRates() {
         return webClient.get()
-
-                .uri(baseUrl + exchangeRatesUri)
+                .uri(exchangeRatesUri)
                 .retrieve()
                 .bodyToFlux(ExchangeRateDto.class)
-                .filter(dto -> dto.getUsdToNtd() != null && !dto.getUsdToNtd().isEmpty())
-                .map(dto -> ExchangeRate.builder()
-                        .date(dto.getDate())
-                        .usdToNtd(new BigDecimal(dto.getUsdToNtd()))
-                        .createdAt(LocalDateTime.now())
-                        .build());
+                .filter(dto -> dto != null && dto.hasValidUsdToNtd());
     }
 }
