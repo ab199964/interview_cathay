@@ -3,7 +3,7 @@ package com.example.testinterview.service.impl;
 import com.example.testinterview.dto.ExchangeRateDto;
 import com.example.testinterview.mapper.ExchangeRateMapper;
 import com.example.testinterview.repository.ExchangeRateRepository;
-import com.example.testinterview.response.ApiErrorException;
+import com.example.testinterview.exception.ApiErrorException;
 import com.example.testinterview.response.ApiResponseCode;
 import com.example.testinterview.service.ExchangeRateService;
 import lombok.RequiredArgsConstructor;
