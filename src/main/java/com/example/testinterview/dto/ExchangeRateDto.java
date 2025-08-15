@@ -48,15 +48,6 @@ public class ExchangeRateDto {
         }
     }
 
-    public LocalDate toLocalDateOrNull() {
-        if (date == null || date.isBlank()) return null;
-        try {
-            return LocalDate.parse(date, java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     @JsonProperty("usd")
     public String getUsd() {
         return usdToNtd;
